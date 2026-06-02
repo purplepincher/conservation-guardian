@@ -4,25 +4,6 @@ A **generic** Workflow Conservation Engine — analyze any workflow for cost eff
 
 > Your workflow costs $12/day. Two nodes account for 78% of tokens. They both call GPT-4 for tasks GPT-4o-mini handles.
 
-Conservation Guardian is a framework-agnostic Python library that analyzes workflow execution for cost efficiency and detects waste. It doesn't change your workflows — it tells you what to change and why. Works with any workflow engine (Dify, n8n, LangGraph, Temporal, custom DAGs, etc.).
-
-## What It Does
-
-**Budget tracking** — Set hard limits on tokens per run, cost per day, and node count. Know immediately when a workflow crosses a threshold.
-
-**DAG analysis** — Parse any workflow JSON and surface:
-- Redundant LLM calls (same model, same upstream, same job)
-- Dead branches (conditional paths that never execute)
-
-**Per-node profiling** — Track tokens in/out, latency, and cost for every node across runs. Spot degradation before it hurts.
-
-**Waste detection** — Find the expensive stuff nobody notices:
-- **Overprompted nodes** — 4,200 tokens in, 180 out. You're paying for context the model ignores.
-- **Idle nodes** — Running every time, contributing 0.1% of value.
-- **Model mismatch** — Using GPT-4 for classification that GPT-4o-mini handles in 12ms.
-
-**Reports** — Markdown summaries you can paste into Slack, Notion, or a PR comment.
-
 ## Install
 
 ```bash
@@ -32,66 +13,231 @@ pip install conservation-guardian
 ## Quick Start
 
 ```python
-from conservation_guardian.budget import WorkflowBudget
-from conservation_guardian.analyzer import WorkflowDAG
-from conservation_guardian.profiler import Profiler, NodeSample
-from conservation_guardian.detector import WasteDetector
-from conservation_guardian.report import render_report
+from conservation_guardian import (
+    Profiler, NodeSample, WasteDetector, Reporter, WorkflowBudget
+)
 
-# 1. Load a workflow (generic — works with any engine's JSON)
-dag = WorkflowDAG.from_dict(workflow_json)
-print(f"{len(dag.llm_nodes())} LLM nodes, {len(dag.redundant_llm_calls())} redundant")
-
-# 2. Profile some runs
+# 1. Profile some runs
 profiler = Profiler()
 profiler.record(NodeSample(
-    node_id="summarizer",
-    input_tokens=4200,
-    output_tokens=180,
-    latency_ms=820.0,
-    cost_usd=0.015,
+    node_id="summarizer", input_tokens=4200, output_tokens=180,
+    latency_ms=820.0, cost_usd=0.015, node_title="Summarizer",
 ))
 
-# 3. Detect waste
-detector = WasteDetector(profiler)
-findings = detector.detect()
+# 2. Detect waste
+findings = WasteDetector(profiler).detect()
 for f in findings:
     print(f"[{f.severity}] {f.message}")
-    print(f"  → {f.suggestion}")
 
-# 4. Generate report
+# 3. Generate report
 budget = WorkflowBudget()
-report = render_report(budget=budget, dag=dag, profiler=profiler, findings=findings)
-print(report)
+report = Reporter(budget=budget, profiler=profiler, findings=findings, workflow_name="My Workflow")
+print(report.to_markdown())
 ```
 
-## Differences from dify-workflow-guardian
+## API Reference
 
-- **Framework-agnostic**: No Dify-specific assumptions in the analyzer
-- **Extended node types**: Recognizes `llm`, `llm-chain`, `chat-model`, `switch`, `conditional`, and more
-- **Same API**: Drop-in replacement — just change the import package name
+### WorkflowBudget
+
+Token, cost, and node-count limits for workflow execution.
+
+```python
+from conservation_guardian import WorkflowBudget
+
+budget = WorkflowBudget(
+    max_tokens_per_run=500_000,   # Max tokens per single run
+    max_cost_per_day=50.0,         # Max USD spend per day
+    max_nodes_per_workflow=100,    # Max nodes in a workflow
+    price_input_per_1k=0.03,      # Input token pricing
+    price_output_per_1k=0.06,     # Output token pricing
+)
+
+# Pre-flight check
+if budget.is_within_budget(input_tokens=100_000, output_tokens=50_000):
+    cost = budget.record_run(100_000, 50_000)
+
+# Query
+budget.daily_spend()         # Today's total
+budget.avg_tokens_per_run()  # Average across all runs
+```
+
+### Profiler
+
+Collect and query per-node execution profiles.
+
+```python
+from conservation_guardian import Profiler, NodeSample
+
+profiler = Profiler(degradation_window=10)
+
+# Record samples
+profiler.record(NodeSample(
+    node_id="summarizer", input_tokens=4200, output_tokens=180,
+    latency_ms=820.0, cost_usd=0.015, node_title="Summarizer",
+))
+
+# Query
+profile = profiler.get("summarizer")
+profile.run_count            # Number of samples
+profile.avg_input_tokens     # Average input tokens
+profile.avg_output_tokens    # Average output tokens
+profile.avg_latency_ms       # Average latency
+profile.avg_cost             # Average cost per run
+profile.total_cost           # Total cost across all runs
+profile.input_output_ratio   # Input/output token ratio
+profile.is_degrading()       # True if latency trending up
+
+# Top N
+profiler.top_by_cost(5)
+profiler.top_by_tokens(5)
+```
+
+#### Persistence
+
+```python
+# Save / load
+profiler.save("profile.json")
+loaded = Profiler.load("profile.json")
+
+# Trend analysis
+trends = current_profiler.compare(previous_profiler)
+# → [{"metric": "cost", "direction": "worse", "detail": "..."}]
+```
+
+### WasteDetector
+
+Analyze profiler data to surface actionable waste findings.
+
+```python
+from conservation_guardian import WasteDetector
+
+detector = WasteDetector(
+    profiler,
+    max_io_ratio=15.0,                # Input/output ratio threshold
+    low_utilization_threshold=0.1,     # Cost fraction below which node is "underused"
+    expensive_model_ratio=0.8,         # Cost concentration threshold
+    expensive_model_min_samples=5,     # Min samples before concentration check
+    degradation_window=5,              # Window for degradation detection
+)
+
+findings = detector.detect()
+for f in findings:
+    f.node_id      # "summarizer"
+    f.category     # "overprompted", "low_utilization", "expensive_model"
+    f.severity     # "high", "medium", "low"
+    f.message      # Human-readable description
+    f.suggestion   # What to do about it
+```
+
+### WorkflowDAG
+
+Parse and analyze workflow structure.
+
+```python
+from conservation_guardian import WorkflowDAG
+
+dag = WorkflowDAG.from_dict(workflow_json)
+dag.llm_nodes()             # All LLM-type nodes
+dag.redundant_llm_calls()   # Pairs of duplicate LLM nodes
+dag.dead_branches()         # Unreachable paths
+```
+
+### Reporter
+
+Multi-format report generation.
+
+```python
+from conservation_guardian import Reporter
+
+reporter = Reporter(
+    budget=budget,
+    dag=dag,
+    profiler=profiler,
+    findings=findings,
+    workflow_name="My Workflow",
+)
+
+reporter.to_markdown()    # Markdown report
+reporter.to_json()        # JSON for dashboards
+reporter.to_prometheus()  # Prometheus metrics
+reporter.to_slack()       # Slack Blocks JSON
+```
+
+### Adapters
+
+Extract `NodeSample` data from external systems.
+
+```python
+from conservation_guardian.adapters import GenericAdapter, OpenAIAdapter, LangChainAdapter
+
+# Generic: configurable field mapping
+adapter = GenericAdapter(
+    records=[{"name": "node1", "tokens_in": 100, "tokens_out": 50, "time_ms": 200}],
+    field_map={"node_id": "name", "input_tokens": "tokens_in", "output_tokens": "tokens_out", "latency_ms": "time_ms"},
+)
+samples = adapter.extract_samples()
+
+# OpenAI: auto-pricing by model
+adapter = OpenAIAdapter([
+    {"model": "gpt-4o", "usage": {"prompt_tokens": 1000, "completion_tokens": 200}},
+])
+
+# LangChain: parses callback data
+adapter = LangChainAdapter([
+    {"llm_output": {"token_usage": {"prompt_tokens": 500}, "model_name": "gpt-4"}},
+])
+
+# From file
+adapter = GenericAdapter(path="runs.jsonl")
+```
+
+### Exceptions
+
+```python
+from conservation_guardian import BudgetExceededError, InvalidProfileError, AdapterError
+
+try:
+    raise BudgetExceededError("Daily limit hit", metric="daily_cost", current=60.0, limit=50.0)
+except BudgetExceededError as e:
+    print(e.metric, e.current, e.limit)
+```
 
 ## Module Structure
 
-| File | Purpose |
-|------|---------|
+| Module | Purpose |
+|--------|---------|
 | `budget.py` | `WorkflowBudget` — token/cost/node limits and daily tracking |
 | `analyzer.py` | `WorkflowDAG` — parse workflow JSON, find redundancies and dead branches |
 | `profiler.py` | `Profiler`, `NodeProfile`, `NodeSample` — per-node stats and trends |
 | `detector.py` | `WasteDetector`, `WasteFinding` — surface actionable waste |
-| `report.py` | `render_report()` — Markdown conservation reports |
+| `report.py` | `render_report()` — Quick Markdown rendering |
+| `reporter.py` | `Reporter` — Multi-format reports (JSON, Prometheus, Slack) |
+| `adapters/` | Data source adapters (Generic, OpenAI, LangChain) |
+| `exceptions.py` | Custom exceptions |
 
-## Tests
+## Examples
+
+See [`examples/`](examples/) for complete runnable scripts:
+
+- [`basic_usage.py`](examples/basic_usage.py) — Minimal 10-line example
+- [`langchain_integration.py`](examples/langchain_integration.py) — LangChain callback data
+- [`budget_enforcement.py`](examples/budget_enforcement.py) — Fail-fast on budget overflow
+- [`historical_tracking.py`](examples/historical_tracking.py) — Save, load, compare over time
+
+## Architecture
+
+See [`docs/architecture.md`](docs/architecture.md) for the full design walkthrough.
+
+The pipeline is: **Budget → Profile → Detect → Report**
+
+## Development
 
 ```bash
+pip install -e .
+pip install pytest ruff mypy
 python -m pytest tests/ -v
+ruff check src/ tests/
 ```
-
-## Philosophy
-
-Conservation Guardian doesn't optimize your workflows. It tells you where the money goes and what to do about it. The fixes are yours to make — but at least you'll know where to look.
-
-Built for [SuperInstance](https://github.com/SuperInstance).
 
 ## License
 
