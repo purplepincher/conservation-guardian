@@ -82,11 +82,11 @@ class Reporter:
         lines: list[str] = []
 
         if self.budget is not None:
-            lines.append(f'# HELP conservation_budget_daily_spend Total spend today in USD')
-            lines.append(f'# TYPE conservation_budget_daily_spend gauge')
+            lines.append('# HELP conservation_budget_daily_spend Total spend today in USD')
+            lines.append('# TYPE conservation_budget_daily_spend gauge')
             lines.append(f'conservation_budget_daily_spend {{workflow="{self.workflow_name}"}} {self.budget.daily_spend():.6f}')
-            lines.append(f'# HELP conservation_budget_avg_tokens_per_run Average tokens per run')
-            lines.append(f'# TYPE conservation_budget_avg_tokens_per_run gauge')
+            lines.append('# HELP conservation_budget_avg_tokens_per_run Average tokens per run')
+            lines.append('# TYPE conservation_budget_avg_tokens_per_run gauge')
             lines.append(f'conservation_budget_avg_tokens_per_run {{workflow="{self.workflow_name}"}} {self.budget.avg_tokens_per_run():.0f}')
 
         if self.profiler is not None:
@@ -100,8 +100,8 @@ class Reporter:
                 lines.append(f'conservation_node_avg_output_tokens{{{labels}}} {p.avg_output_tokens:.0f}')
 
         if self.findings:
-            lines.append(f'# HELP conservation_findings_total Number of waste findings')
-            lines.append(f'# TYPE conservation_findings_total gauge')
+            lines.append('# HELP conservation_findings_total Number of waste findings')
+            lines.append('# TYPE conservation_findings_total gauge')
             lines.append(f'conservation_findings_total {{workflow="{self.workflow_name}"}} {len(self.findings)}')
             for severity in ("high", "medium", "low"):
                 count = sum(1 for f in self.findings if f.severity == severity)

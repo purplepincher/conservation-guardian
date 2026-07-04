@@ -6,6 +6,10 @@ Conservation Guardian follows a four-stage pipeline pattern:
 Budget → Profile → Detect → Report
 ```
 
+It also ships a CLI wrapper (`cli.py`) that enforces a budget around an
+*external* subprocess, so coding-agent CLIs that don't import the library
+can still be governed. See "CLI wrapper" at the end of this document.
+
 ## Budget (`budget.py`)
 
 **Purpose:** Enforce hard limits on token usage, cost, and node count.
@@ -85,6 +89,31 @@ ConservationGuardianError (base)
 ├── InvalidProfileError  — corrupted profile data
 └── AdapterError         — data source failures
 ```
+
+## CLI wrapper (`cli.py`)
+
+**Purpose:** Enforce a budget around an *external* subprocess — any coding
+agent CLI (opencode, aider, kimi-style tools) — so this library can govern
+tools that don't import it.
+
+```
+conservation-guardian run [--max-time-seconds N] [--max-tokens N] [--report PATH] -- <cmd>
+```
+
+| Budget | Enforcement | How |
+|--------|-------------|-----|
+| `--max-time-seconds` | **Hard** | SIGTERM → SIGKILL on deadline; exit `124` |
+| `--max-tokens` | **Best-effort** | Scans combined stdout+stderr for token-usage records (OpenAI/Anthropic/generic), kills on exceed; exit `125` |
+
+Design notes:
+- The child's stdout/stderr are streamed through unchanged to preserve
+  interactive behavior — the wrapper tees into a trailing 256 KB scan window
+  (bounded so huge outputs don't blow up memory/CPU).
+- Token detection is intentionally model-agnostic and heuristic: if the
+  wrapped tool emits no usage telemetry, `--max-tokens` is a documented
+  no-op rather than a silent failure mode.
+- Exit codes propagate the child's status on normal completion;
+  `124`/`125`/`126` distinguish timeout / token-kill / launch-failure.
 
 ## Design Principles
 

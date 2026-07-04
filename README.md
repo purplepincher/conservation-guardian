@@ -10,6 +10,9 @@ A **generic** Workflow Conservation Engine — analyze any workflow for cost eff
 pip install conservation-guardian
 ```
 
+This installs both the Python library and a `conservation-guardian`
+command-line wrapper (see [CLI wrapper](#cli-wrapper-wrap-any-command-in-a-budget) below).
+
 ## Quick Start
 
 ```python
@@ -202,6 +205,38 @@ except BudgetExceededError as e:
     print(e.metric, e.current, e.limit)
 ```
 
+### CLI wrapper — wrap any command in a budget
+
+The package also ships a `conservation-guardian` CLI that wraps an arbitrary
+subprocess and enforces a budget around it. This lets you govern coding-agent
+CLIs (opencode, aider, kimi-style tools) — or any other command — without
+needing them to import this library.
+
+```bash
+# Hard wall-clock budget: kill the child on exceed (exit 124)
+conservation-guardian run --max-time-seconds 600 -- opencode exec "refactor foo.py"
+
+# Best-effort token budget: scans child stdout/stderr for token-usage telemetry
+# (OpenAI / Anthropic / generic key=value formats) and kills on exceed (exit 125)
+conservation-guardian run --max-tokens 100000 -- aider --model gpt-4o
+
+# Emit a JSON run report alongside the normal passthrough
+conservation-guardian run --max-time-seconds 300 --report run.json -- my-agent "$TASK"
+```
+
+Budget semantics:
+
+| Flag | Enforcement | Exit on exceed |
+|------|-------------|----------------|
+| `--max-time-seconds N` | **Hard** — child is SIGTERM'd (then SIGKILL'd) on timeout | `124` |
+| `--max-tokens N` | **Best-effort** — requires the child to emit token usage; otherwise a no-op | `125` |
+
+The child's `stdout`/`stderr` are streamed through unchanged so interactive
+behavior is preserved. `--report PATH` writes a JSON record
+(`started_at`, `finished_at`, `duration_seconds`, `exit_code`,
+`killed_reason`, `tokens_detected`, …). Launch failures exit `126`.
+Run `conservation-guardian --help` for the full synopsis.
+
 ## Module Structure
 
 | Module | Purpose |
@@ -213,6 +248,7 @@ except BudgetExceededError as e:
 | `report.py` | `render_report()` — Quick Markdown rendering |
 | `reporter.py` | `Reporter` — Multi-format reports (JSON, Prometheus, Slack) |
 | `adapters/` | Data source adapters (Generic, OpenAI, LangChain) |
+| `cli.py` | CLI wrapper (`run` subcommand) for budgeting arbitrary subprocesses |
 | `exceptions.py` | Custom exceptions |
 
 ## Examples
@@ -233,10 +269,10 @@ The pipeline is: **Budget → Profile → Detect → Report**
 ## Development
 
 ```bash
-pip install -e .
-pip install pytest ruff mypy
+pip install -e ".[dev]"          # installs pytest, ruff, mypy
 python -m pytest tests/ -v
 ruff check src/ tests/
+mypy src/ --ignore-missing-imports
 ```
 
 ## License

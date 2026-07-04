@@ -10,8 +10,8 @@ import threading
 import pytest
 
 from conservation_guardian.budget import WorkflowBudget
-from conservation_guardian.detector import WasteDetector, WasteFinding
-from conservation_guardian.exceptions import AdapterError, BudgetExceededError, InvalidProfileError
+from conservation_guardian.detector import WasteFinding
+from conservation_guardian.exceptions import AdapterError, BudgetExceededError
 from conservation_guardian.profiler import NodeProfile, NodeSample, Profiler
 from conservation_guardian.reporter import Reporter
 from conservation_guardian.adapters import GenericAdapter, OpenAIAdapter, LangChainAdapter

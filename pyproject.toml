@@ -4,21 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "conservation-guardian"
-version = "0.2.0"
+version = "0.3.0"
 description = "Generic Workflow Conservation Engine — analyze any workflow for cost efficiency and detect waste"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{name = "SuperInstance"}]
-keywords = ["workflow", "cost", "optimization", "conservation", "guardian", "efficiency", "waste-detection"]
+keywords = ["workflow", "cost", "optimization", "conservation", "guardian", "efficiency", "waste-detection", "budget", "cli"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Monitoring",
+    "Environment :: Console",
 ]
+
+[project.scripts]
+conservation-guardian = "conservation_guardian.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff", "mypy"]
 
 [project.urls]
 Homepage = "https://github.com/SuperInstance/conservation-guardian"

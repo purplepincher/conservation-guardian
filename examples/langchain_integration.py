@@ -13,8 +13,8 @@ from conservation_guardian import (
     Profiler,
     WasteDetector,
     Reporter,
-    LangChainAdapter,
 )
+from conservation_guardian.adapters import LangChainAdapter
 
 # Simulated LangChain callback data (in practice, collected via callbacks)
 langchain_records = [
