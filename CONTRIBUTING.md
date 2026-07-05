@@ -5,7 +5,7 @@ Thanks for your interest! Here's how to contribute.
 ## Development Setup
 
 ```bash
-git clone https://github.com/SuperInstance/conservation-guardian.git
+git clone https://github.com/purplepincher/conservation-guardian.git
 cd conservation-guardian
 python -m venv .venv && source .venv/bin/activate
 pip install -e .

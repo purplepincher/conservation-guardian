@@ -9,7 +9,7 @@ description = "Generic Workflow Conservation Engine — analyze any workflow for
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-authors = [{name = "SuperInstance"}]
+authors = [{name = "purplepincher"}]
 keywords = ["workflow", "cost", "optimization", "conservation", "guardian", "efficiency", "waste-detection", "budget", "cli"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -31,7 +31,7 @@ conservation-guardian = "conservation_guardian.cli:main"
 dev = ["pytest>=7", "ruff", "mypy"]
 
 [project.urls]
-Homepage = "https://github.com/SuperInstance/conservation-guardian"
+Homepage = "https://github.com/purplepincher/conservation-guardian"
 
 [tool.setuptools.packages.find]
 where = ["src"]
