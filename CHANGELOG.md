@@ -5,6 +5,17 @@ All notable changes to Conservation Guardian will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added MIT `LICENSE` file so the README's license link resolves.
+
+### Changed
+
+- Restructured `README.md` to put a quick-start first and use an instructional tone.
+- Updated `AGENT.md`, `CONTRIBUTING.md`, `pyproject.toml`, and release links to point at the `purplepincher` fork and remove `SuperInstance` references.
+
 ## [0.3.0] — 2026-07-04
 
 ### Added
@@ -77,7 +88,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WasteDetector` / `WasteFinding` — waste detection heuristics
 - `render_report()` — Markdown conservation reports
 - Core test suite
-
-[0.3.0]: https://github.com/purplepincher/conservation-guardian/releases/tag/v0.3.0
-[0.2.0]: https://github.com/purplepincher/conservation-guardian/releases/tag/v0.2.0
-[0.1.0]: https://github.com/purplepincher/conservation-guardian/releases/tag/v0.1.0
