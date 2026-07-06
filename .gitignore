@@ -30,3 +30,4 @@ htmlcov/
 
 # Local scratch
 glm.log
+.aider*
