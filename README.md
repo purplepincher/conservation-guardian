@@ -168,7 +168,7 @@ adapter = GenericAdapter(path="runs.jsonl")
 
 ## How it works
 
-The library collects per-node samples (`NodeSample`), each containing input/output token counts, latency, and cost. A `Profiler` aggregates these into per-node profiles (`NodeProfile`) that expose averages, totals, and trends. `WasteDetector` applies configurable thresholds to profiles and returns `WasteFinding` objects for over‑prompted nodes, low‑utilization nodes, expensive‑model concentration, and latency degradation.
+The library collects per-node samples (`NodeSample`), each containing input/output token counts, latency, and cost. A `Profiler` aggregates these into per-node profiles (`NodeProfile`) that expose averages, totals, and trends. `WasteDetector` applies configurable thresholds to profiles and returns `WasteFinding` objects for **three** categories: over‑prompted nodes, low‑utilization nodes, and expensive‑model concentration. (Latency degradation is detectable via `NodeProfile.is_degrading()` and `Profiler.compare()`, but `WasteDetector.detect()` does **not** currently emit a degradation finding — see [Capability verification](#capability-verification) below.)
 
 The `WorkflowBudget` tracks running totals of tokens and cost per day; `record_run` checks limits before allowing execution. `WorkflowDAG` parses workflow JSON into a DAG and identifies redundant LLM calls and dead branches.
 
@@ -195,7 +195,7 @@ A `--report PATH` flag writes a JSON file with timestamps, exit code, kill reaso
 - Daily spend tracking (`budget.daily_spend()`) resets to zero when the process starts; it is not persisted across restarts unless manually saved/loaded.
 - The CLI currently scans for the patterns implemented in `_scan_tokens`; new formats must be added manually.
 - Wall‑clock timeout gives a 5‑second grace period after SIGTERM before SIGKILL is sent.
-- The library is tested on Python 3.9+.
+- The library requires Python 3.10+ (matching `pyproject.toml`).
 
 ## Project structure
 
@@ -214,6 +214,61 @@ A `--report PATH` flag writes a JSON file with timestamps, exit code, kill reaso
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Capability verification
+
+Every claim below was traced to working code and/or a passing test (109 tests,
+all green). Markers follow this org's convention:
+
+- ✅ **real today** — traced to working code
+- ⚠️ **real but conditional** — works, but needs something external or has caveats
+- 🔮 **aspirational / later phase** — described as a direction, not implemented
+
+### ✅ Real today
+
+| Capability | Where in code |
+|------------|---------------|
+| Per-node profiling: record samples, aggregate averages/totals/trends | `profiler.py::Profiler`, `NodeProfile` — tested in `TestProfiler` |
+| `NodeProfile.is_degrading()` — latency trend detection (needs 2×window samples) | `profiler.py` — tested in `test_is_degrading` / `test_not_degrading` |
+| `Profiler.compare()` — trend analysis between snapshots (20% change threshold) | `profiler.py` — tested in `test_compare_*` |
+| Save/load profiler state to JSON (skips corrupted samples) | `profiler.py::save/load` — tested in `test_save_and_load_roundtrip` |
+| Budget enforcement: token/cost/node limits, daily tracking | `budget.py::WorkflowBudget` — tested in `TestWorkflowBudget` |
+| Waste detection: 3 categories (overprompted, low_utilization, expensive_model) | `detector.py::WasteDetector.detect` — tested in `TestWasteDetector` |
+| DAG analysis: parse JSON, find redundant LLM calls, dead branches | `analyzer.py::WorkflowDAG` — tested in `TestWorkflowDAG` |
+| Multi-format reports: Markdown, JSON, Prometheus, Slack | `reporter.py::Reporter` / `report.py::render_report` — tested in `TestReport` |
+| Adapters: Generic (dot-notation field mapping), OpenAI (auto-pricing), LangChain | `adapters/` — tested in adapter tests |
+| CLI subprocess wrapper: hard timeout (exit 124), best-effort token budget (exit 125) | `cli.py::cmd_run` — tested in `test_cli.py` |
+
+### ⚠️ Real but conditional
+
+| Capability | Condition |
+|------------|-----------|
+| `WasteDetector(degradation_window=N)` | The parameter is **accepted and stored** but **never used by `detect()`**. There is no degradation finding category. Use `NodeProfile.is_degrading()` or `Profiler.compare()` directly for latency trend analysis. |
+| `--max-tokens` CLI budget | Best-effort only. Requires the wrapped process to emit token-usage telemetry in a recognised format (OpenAI JSON, Anthropic JSON, `key=value`, or `"Tokens used: …"`). If the child emits nothing, this limit is a **no-op**. |
+| `WorkflowBudget.daily_spend()` | In-memory only. Resets to zero when the process restarts. Not persisted unless you save/load the profiler separately. |
+| OpenAI adapter pricing | Hardcoded table covers gpt-4, gpt-4-turbo, gpt-4o, gpt-4o-mini, gpt-3.5-turbo, o1, o1-mini, o3-mini. Unknown models fall back to gpt-4o pricing. Prices may be outdated. |
+| `WorkflowDAG.redundant_llm_calls()` | Heuristic only: flags LLM nodes with the same model provider/name AND the same upstream sources. May produce false positives or miss semantic duplicates. |
+| `WorkflowDAG.dead_branches()` | Heuristic: flags branches from if-else/switch/conditional nodes that lead only to leaf nodes. Simplified — does not analyze runtime data flow. |
+
+### Undocumented-but-real API surface
+
+These methods exist, are tested, but are not shown in the README examples:
+
+| Where | Symbol | What it does |
+|-------|--------|-------------|
+| `NodeProfile` | `cost_trend(last_n=10)` / `latency_trend(last_n=10)` | Return recent sample values as a list for charting. |
+| `NodeProfile` | `total_tokens` / `avg_latency_ms` | Aggregate token count and average latency. |
+| `Profiler` | `top_by_tokens(n=5)` | Top nodes by total token consumption (complement to `top_by_cost`). |
+| `Profiler` | `all_profiles()` | All profiles as a list. |
+| `WorkflowBudget` | `check_node_count(n)` | Check whether a node count is within `max_nodes_per_workflow`. |
+| `GenericAdapter` | dot-notation `field_map` | Field paths like `"usage.prompt_tokens"` resolve nested dicts. |
+
+### 🔮 Aspirational / later phase
+
+| Claimed direction | Status |
+|-------------------|--------|
+| `WasteFinding` category `"redundant"` | Listed in the `category` field comment but **never produced by `detect()`**. Would presumably come from DAG analysis integration. |
+| Latency degradation as a `WasteFinding` | Not implemented in `detect()`. The detection infrastructure exists (`is_degrading()`, `compare()`) but is not wired into the detector's `detect()` method. |
 
 ## Additional documentation
 
